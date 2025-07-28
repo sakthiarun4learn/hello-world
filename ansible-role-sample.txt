@@ -1,0 +1,89 @@
+root@ansible-controller ~/playbooks on  main ➜  ls -lrth
+total 24K
+-rw-r--r--  1 root root  117 Jul  1 04:48 apache.yml
+-rw-r--r--  1 root root  163 Jul 28 13:26 inventory
+-rw-r--r--  1 root root  160 Jul 28 13:30 ansible.cfg
+-rw-r--r--  1 root root   51 Jul 28 14:33 setup.yaml
+-rw-r--r--  1 root root   96 Jul 28 15:06 requirements.yaml
+drwxr-xr-x 10 root root 4.0K Jul 28 15:08 ansible-role-apache
+
+root@ansible-controller ~/playbooks on  main ➜  cat setup.yaml 
+---
+- hosts: all
+  roles: 
+  - ansible-role-apache
+
+root@ansible-controller ~/playbooks on  main ➜  cat ansible-role-apache/tasks/main.yml 
+#SPDX-License-Identifier: MIT-0
+
+# tasks file for ansible-role-apache
+
+---
+# tasks file for apache
+- import_tasks: install.yml
+- import_tasks: configure.yml
+- import_tasks: copyindex.yml
+# the order of above file matters. if you keep in wrong order, it will fail.
+
+root@ansible-controller ~/playbooks on  main ➜  cat ansible-role-apache/tasks/install.yml 
+---
+- name: Install latest version of Apache
+  apt:
+    name: apache2
+    update_cache: yes
+    state: present
+  notify: start-service #this will call handler task of same name (once you install apache2, you need to start service.)
+
+root@ansible-controller ~/playbooks on  main ➜  cat ansible-role-apache/tasks/configure.yml 
+---
+- name: Create document root for domain configured in host variable
+  file:
+     path: "/var/www/{{ http_host }}" #create this folder (directory) in node
+     state: directory
+     owner: root
+     group: root
+     mode: '0755'
+
+- name: Set up virtualHost
+  template:
+     src: "templates/apacheconf.j2"
+     dest: "/etc/apache2/sites-available/{{ http_conf }}"
+
+- name: Enable site
+  command: a2ensite {{ http_conf }}
+  notify: restart-apache
+
+
+root@ansible-controller ~/playbooks on  main ➜  cat ansible-role-apache/tasks/copyindex.yml 
+---
+- name: Copy your index file
+  template:
+     src: "files/index.html"    #this index.html must be at files location
+     dest: "/var/www/{{ http_host }}/index.html"
+
+root@ansible-controller ~/playbooks on  main ➜  
+
+root@ansible-controller ~/playbooks on  main ➜  cat ansible-role-apache/files/index.html 
+<html>
+   <head>
+       <title>{{ http_host }}</title>
+   </head>
+   <body>
+       <h1>Howdy, Welcome to {{ http_host }}</h1>
+   </body>
+</html>
+
+root@ansible-controller ~/playbooks on  main ➜  cat ansible-role-apache/handlers/main.yml 
+#SPDX-License-Identifier: MIT-0
+# handlers file for ansible-role-apache
+#
+---
+# handlers file for apache
+- name: start-service # name must be similar to notify task
+  service:
+    name: apache2
+    state: started
+- name: restart-apache # name must be similar to notify task
+  service:
+    name: apache2
+    state: restarted
